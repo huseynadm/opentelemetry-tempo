@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - name: grafana
+          containerPort: 3000
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+          requests:
+            memory: "500M"
+            cpu: "500m"
+        env:
+          - name: GF_AUTH_ANONYMOUS_ENABLED
+            value: "true"
+          - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+            value: "Admin"
+          - name: GF_AUTH_DISABLE_LOGIN_FORM
+            value: "true"
+          - name: GF_FEATURE_TOGGLES_ENABLE
+            value: "traceqlEditor tempoSearch tempoBackendSearch tempoServiceGraph tempoApmTable"
+          - name : GF_PATHS_CONFIG
+            value: '/etc/grafana/default.ini'
+
+        volumeMounts:
+          - mountPath: /var/lib/grafana
+            name: grafana-storage
+          - mountPath: /etc/grafana/provisioning/datasources
+            name: datasources-volume
+          - mountPath: /etc/grafana/
+            name: grafana-volume
+
+      volumes:
+        - name: grafana-storage
+          emptyDir: {}
+
+        - name: datasources-volume
+          configMap:
+            defaultMode: 420
+            name: grafana-server-datasources
+
+        - name : grafana-volume
+          configMap:
+            defaultMode: 420
+            name: grafana-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-server-datasources
+  namespace: monitoring
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      uid: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus-service.monitoring.svc.cluster.local:9090
+      basicAuth: false
+      isDefault: false
+      version: 1
+      editable: false
+      jsonData:
+        httpMethod: GET
+    - name: Tempo
+      type: tempo
+      access: proxy
+      orgId: 1
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: false
+      apiVersion: 1
+      uid: tempo
+      jsonData:
+        httpMethod: GET
+        serviceMap:
+          datasourceUid: prometheus
